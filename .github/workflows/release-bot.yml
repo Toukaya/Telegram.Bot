@@ -1,0 +1,44 @@
+name: Release ForwardAnalyzerBot
+
+on:
+  push:
+    tags:
+      - 'bot-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish linux-x64
+        run: |
+          dotnet publish bots/ForwardAnalyzerBot.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o publish/linux-x64
+
+      - name: Package
+        run: |
+          cd publish/linux-x64
+          tar -czvf ../../ForwardAnalyzerBot-linux-x64.tar.gz .
+          cd ../..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ForwardAnalyzerBot-linux-x64.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
