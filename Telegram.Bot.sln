@@ -50,6 +50,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".devcontainer", ".devcontai
 		.devcontainer\Dockerfile = .devcontainer\Dockerfile
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bots", "bots", "{4154ED45-E50D-4AC0-BF78-92F9AA4F0743}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ForwardAnalyzerBot", "bots\ForwardAnalyzerBot.csproj", "{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -68,6 +72,10 @@ Global
 		{AAB9E3BA-D749-4D38-9021-EBD8D0BC8975}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AAB9E3BA-D749-4D38-9021-EBD8D0BC8975}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AAB9E3BA-D749-4D38-9021-EBD8D0BC8975}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -79,6 +87,7 @@ Global
 		{71662597-40F2-4192-AC4D-5FB9A1F12642} = {C45387C6-C93F-4FD2-84A8-A69CCE93B7EE}
 		{C20A563E-603B-49E8-A954-DB90D4F351DE} = {71662597-40F2-4192-AC4D-5FB9A1F12642}
 		{4897F36C-2F57-48A7-B425-D8F695E0AC0D} = {C45387C6-C93F-4FD2-84A8-A69CCE93B7EE}
+		{DEC0F309-FE9D-4485-83DA-7C7EB830C5D8} = {4154ED45-E50D-4AC0-BF78-92F9AA4F0743}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F6A9C4CA-DF26-4772-9119-627935D70E7C}

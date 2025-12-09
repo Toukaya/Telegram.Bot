@@ -1,44 +1,92 @@
 name: Release ForwardAnalyzerBot
 
 on:
-  push:
-    tags:
-      - 'bot-v*'
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 'Release notes'
+        required: true
+      version:
+        description: "Release version (leave empty for automatic versioning)"
+
+run-name: '🤖 Bot Release ${{ inputs.version }}'
+
+env:
+  PROJECT_PATH: bots/ForwardAnalyzerBot.csproj
+  CONFIGURATION: Release
+  PUBLISH_PATH: publish/linux-x64
+  RELEASE_NOTES: ${{ inputs.release_notes }}
+  VERSION: ${{ inputs.version }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write  # For git tag
+      id-token: write  # Keep consistent with release.yml (OIDC if ever needed)
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 100
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
+    - name: Determine version
+      if: ${{ env.VERSION == '' }}
+      run: |
+        git fetch --depth=100 --tags
+        LAST_BOT_TAG=$(git tag -l 'bot-v*' --sort=-v:refname | head -n1)
+        if [ -z "$LAST_BOT_TAG" ]; then
+          NEXT_VERSION="1.0.0"
+        else
+          LAST_VERSION=${LAST_BOT_TAG#bot-v}
+          MAJOR=${LAST_VERSION%%.*}
+          REST=${LAST_VERSION#*.}
+          MINOR=${REST%%.*}
+          PATCH=${REST#*.}
+          PATCH=${PATCH%%[-+]*}
+          NEXT_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+        fi
+        RELEASE_VERSION=${{ vars.BOT_RELEASE_VERSION }}
+        if [[ -z "$RELEASE_VERSION" ]]; then VERSION=$NEXT_VERSION; elif [[ "$RELEASE_VERSION" > "$NEXT_VERSION" ]]; then VERSION=$RELEASE_VERSION; else VERSION=$NEXT_VERSION; fi
+        echo Last bot tag: ${LAST_BOT_TAG:-none} · Next version: $NEXT_VERSION · Release version: ${RELEASE_VERSION:-n/a} · Build version: $VERSION
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Publish linux-x64
-        run: |
-          dotnet publish bots/ForwardAnalyzerBot.csproj \
-            -c Release \
-            -r linux-x64 \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -o publish/linux-x64
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
 
-      - name: Package
-        run: |
-          cd publish/linux-x64
-          tar -czvf ../../ForwardAnalyzerBot-linux-x64.tar.gz .
-          cd ../..
+    - name: Publish linux-x64
+      run: |
+        dotnet publish $PROJECT_PATH \
+          -c $CONFIGURATION \
+          -r linux-x64 \
+          --self-contained true \
+          -p:PublishSingleFile=true \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          -p:Version=$VERSION \
+          -o $PUBLISH_PATH
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ForwardAnalyzerBot-linux-x64.tar.gz
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Package
+      run: |
+        cp bots/analyze_text.sh $PUBLISH_PATH/
+        cp bots/analyze_media.sh $PUBLISH_PATH/
+        cp bots/.env.example $PUBLISH_PATH/
+        cp bots/start.sh $PUBLISH_PATH/
+        cd $PUBLISH_PATH
+        tar -czvf ../../ForwardAnalyzerBot-linux-x64.tar.gz .
+
+    - name: Git tag
+      run: |
+        git tag bot-v$VERSION
+        git push --tags
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: bot-v${{ env.VERSION }}
+        name: ForwardAnalyzerBot v${{ env.VERSION }}
+        body: ${{ env.RELEASE_NOTES }}
+        files: |
+          ForwardAnalyzerBot-linux-x64.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
