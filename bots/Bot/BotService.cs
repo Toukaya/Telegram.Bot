@@ -11,16 +11,30 @@ public class BotService : IDisposable
     private readonly TelegramBotClient _bot;
     private readonly TaskPool _taskPool;
     private readonly ScriptRunner _scriptRunner;
+    private readonly AnalyzerService _analyzerService;
     private readonly MessageHandler _messageHandler;
     private readonly CancellationTokenSource _cts = new();
+    private readonly bool _usePlugins;
     private bool _disposed;
 
+    // Legacy constructor - uses shell scripts
     public BotService(string token, string textScriptPath, string mediaScriptPath, int concurrency = 1, int scriptTimeout = 30)
     {
         _bot = new TelegramBotClient(token);
         _taskPool = new TaskPool(concurrency);
         _scriptRunner = new ScriptRunner(textScriptPath, mediaScriptPath, scriptTimeout);
         _messageHandler = new MessageHandler(_bot, _taskPool, _scriptRunner);
+        _usePlugins = false;
+    }
+
+    // New constructor - uses C# plugin system
+    public BotService(string token, AnalyzerService analyzerService, int concurrency = 1)
+    {
+        _bot = new TelegramBotClient(token);
+        _taskPool = new TaskPool(concurrency);
+        _analyzerService = analyzerService;
+        _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService);
+        _usePlugins = true;
     }
 
     public async Task StartAsync()
@@ -28,14 +42,21 @@ public class BotService : IDisposable
         var me = await _bot.GetMe();
         Console.WriteLine($"[BotService] Bot started: @{me.Username} (ID: {me.Id})");
 
-        if (!_scriptRunner.IsTextScriptAvailable())
+        if (_usePlugins)
         {
-            Console.WriteLine("[BotService] Warning: Text analysis script not found.");
+            Console.WriteLine($"[BotService] Using C# plugin system with {_analyzerService.Analyzers.Count} analyzers");
         }
-
-        if (!_scriptRunner.IsMediaScriptAvailable())
+        else
         {
-            Console.WriteLine("[BotService] Warning: Media analysis script not found.");
+            if (!_scriptRunner.IsTextScriptAvailable())
+            {
+                Console.WriteLine("[BotService] Warning: Text analysis script not found.");
+            }
+
+            if (!_scriptRunner.IsMediaScriptAvailable())
+            {
+                Console.WriteLine("[BotService] Warning: Media analysis script not found.");
+            }
         }
 
         var receiverOptions = new ReceiverOptions
@@ -102,6 +123,7 @@ public class BotService : IDisposable
 
         _cts.Cancel();
         _taskPool.Dispose();
+        _analyzerService?.Dispose();
         _cts.Dispose();
     }
 }

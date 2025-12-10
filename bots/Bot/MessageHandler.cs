@@ -1,3 +1,4 @@
+using TelegramBotService;
 using ForwardAnalyzerBot.Models;
 using ForwardAnalyzerBot.Services;
 using Telegram.Bot;
@@ -11,17 +12,27 @@ public class MessageHandler
     private readonly ITelegramBotClient _bot;
     private readonly TaskPool _taskPool;
     private readonly ScriptRunner _scriptRunner;
+    private readonly AnalyzerService _analyzerService;
 
     private static readonly HashSet<string> MediaTypes = new()
     {
         "Photo", "Video", "Voice", "Audio", "VideoNote", "Sticker", "Document"
     };
 
+    // Legacy constructor - uses shell scripts
     public MessageHandler(ITelegramBotClient bot, TaskPool taskPool, ScriptRunner scriptRunner)
     {
         _bot = bot;
         _taskPool = taskPool;
         _scriptRunner = scriptRunner;
+    }
+
+    // New constructor - uses C# plugin system
+    public MessageHandler(ITelegramBotClient bot, TaskPool taskPool, AnalyzerService analyzerService)
+    {
+        _bot = bot;
+        _taskPool = taskPool;
+        _analyzerService = analyzerService;
     }
 
     public async Task HandleMessageAsync(Message message, CancellationToken ct)
@@ -67,23 +78,31 @@ public class MessageHandler
             // Extract forward information
             var result = ForwardInfoExtractor.Extract(message);
 
-            // Determine if this is media or text content
-            bool isMedia = IsMediaContent(result.Content.Type);
-
-            if (isMedia)
+            // Use plugin system if available, otherwise fall back to scripts
+            if (_analyzerService != null)
             {
-                // Run media analysis script
-                result.Analysis = await _scriptRunner.RunMediaAnalysisAsync(
-                    result.Content.Type,
-                    result.Content.FileId,
-                    result.Content.Caption
-                );
+                // Use C# plugin system
+                var context = AnalyzerService.CreateContext(result.Content);
+                result.Analysis = await _analyzerService.RunAnalysisAsync(context, ct);
             }
             else
             {
-                // Run text analysis script
-                var textContent = GetTextContent(result.Content);
-                result.Analysis = await _scriptRunner.RunTextAnalysisAsync(textContent);
+                // Fall back to shell scripts (legacy)
+                bool isMedia = IsMediaContent(result.Content.Type);
+
+                if (isMedia)
+                {
+                    result.Analysis = await _scriptRunner.RunMediaAnalysisAsync(
+                        result.Content.Type,
+                        result.Content.FileId,
+                        result.Content.Caption
+                    );
+                }
+                else
+                {
+                    var textContent = GetTextContent(result.Content);
+                    result.Analysis = await _scriptRunner.RunTextAnalysisAsync(textContent);
+                }
             }
 
             // Send JSON result
