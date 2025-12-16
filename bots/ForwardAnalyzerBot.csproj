@@ -13,10 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="TelegramBotService/TelegramBotService.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="TelegramBotService\**" />
+    <ProjectReference Include="BotDatabase/BotDatabase.csproj" />
   </ItemGroup>
 
 </Project>
