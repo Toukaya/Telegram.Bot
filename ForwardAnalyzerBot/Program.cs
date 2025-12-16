@@ -1,5 +1,6 @@
 using ForwardAnalyzerBot.Bot;
 using ForwardAnalyzerBot.Services;
+using BotDatabase.Services;
 
 class Program
 {
@@ -9,6 +10,7 @@ class Program
         var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         var usePlugins = Environment.GetEnvironmentVariable("USE_PLUGINS")?.ToLower() == "true";
         var pluginsPath = Environment.GetEnvironmentVariable("PLUGINS_PATH");
+        var databasePath = Environment.GetEnvironmentVariable("DATABASE_PATH") ?? "./bot.db";
 
         // Legacy script paths (only used if USE_PLUGINS != true)
         var textScriptPath = Environment.GetEnvironmentVariable("TEXT_SCRIPT_PATH") ?? "./analyze_text.sh";
@@ -37,6 +39,13 @@ class Program
 
         Console.WriteLine("=== Forward Message Analyzer Bot ===");
 
+        // Initialize database
+        var db = new BotDb(databasePath);
+        await db.InitializeAsync();
+        var dbExists = File.Exists(databasePath);
+        Console.WriteLine($"Database: {databasePath} {(dbExists ? "(loaded)" : "(created)")}");
+        Console.WriteLine();
+
         BotService botService;
 
         if (usePlugins)
@@ -50,6 +59,7 @@ class Program
 
             botService = new BotService(
                 token: token,
+                db: db,
                 analyzerService: analyzerService,
                 concurrency: 1
             );
@@ -63,6 +73,7 @@ class Program
 
             botService = new BotService(
                 token: token,
+                db: db,
                 textScriptPath: textScriptPath,
                 mediaScriptPath: mediaScriptPath,
                 concurrency: 1,

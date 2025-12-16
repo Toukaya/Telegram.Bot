@@ -1,4 +1,5 @@
 using ForwardAnalyzerBot.Services;
+using BotDatabase.Services;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -12,28 +13,31 @@ public class BotService : IDisposable
     private readonly TaskPool _taskPool;
     private readonly ScriptRunner _scriptRunner;
     private readonly AnalyzerService _analyzerService;
+    private readonly BotDb _db;
     private readonly MessageHandler _messageHandler;
     private readonly CancellationTokenSource _cts = new();
     private readonly bool _usePlugins;
     private bool _disposed;
 
     // Legacy constructor - uses shell scripts
-    public BotService(string token, string textScriptPath, string mediaScriptPath, int concurrency = 1, int scriptTimeout = 30)
+    public BotService(string token, BotDb db, string textScriptPath, string mediaScriptPath, int concurrency = 1, int scriptTimeout = 30)
     {
         _bot = new TelegramBotClient(token);
+        _db = db;
         _taskPool = new TaskPool(concurrency);
         _scriptRunner = new ScriptRunner(textScriptPath, mediaScriptPath, scriptTimeout);
-        _messageHandler = new MessageHandler(_bot, _taskPool, _scriptRunner);
+        _messageHandler = new MessageHandler(_bot, _taskPool, _scriptRunner, _db);
         _usePlugins = false;
     }
 
     // New constructor - uses C# plugin system
-    public BotService(string token, AnalyzerService analyzerService, int concurrency = 1)
+    public BotService(string token, BotDb db, AnalyzerService analyzerService, int concurrency = 1)
     {
         _bot = new TelegramBotClient(token);
+        _db = db;
         _taskPool = new TaskPool(concurrency);
         _analyzerService = analyzerService;
-        _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService);
+        _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db);
         _usePlugins = true;
     }
 
@@ -124,6 +128,7 @@ public class BotService : IDisposable
         _cts.Cancel();
         _taskPool.Dispose();
         _analyzerService?.Dispose();
+        _db?.Dispose();
         _cts.Dispose();
     }
 }
