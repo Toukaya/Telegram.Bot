@@ -103,6 +103,56 @@ public class MessageRepository
     public MessageQuery FromUser(long userId) => new MessageQuery(_context).FromUser(userId);
     public MessageQuery Forwarded() => new MessageQuery(_context).ForwardedOnly();
     public MessageQuery Recent(int count = 20) => new MessageQuery(_context).Recent(count);
+    public MessageQuery PendingConversion() => new MessageQuery(_context).WithConversionStatus(ConversionStatuses.Pending);
+    public MessageQuery WithMedia() => new MessageQuery(_context).MediaOnly();
+
+    // Update conversion status
+    public async Task UpdateConversionStatus(int id, string status, string convertedText = "", string error = "")
+    {
+        var msg = await _context.Messages.FindAsync(id);
+        if (msg != null)
+        {
+            msg.ConversionStatus = status;
+            if (!string.IsNullOrEmpty(convertedText))
+            {
+                msg.ConvertedText = convertedText;
+            }
+            if (!string.IsNullOrEmpty(error))
+            {
+                msg.ConversionError = error;
+            }
+            if (status == ConversionStatuses.Completed || status == ConversionStatuses.Failed)
+            {
+                msg.ConvertedAt = DateTime.UtcNow;
+            }
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Updated conversion status for message {id}: {status}");
+        }
+    }
+
+    // Mark conversion as completed
+    public async Task MarkConversionCompleted(int id, string convertedText)
+    {
+        await UpdateConversionStatus(id, ConversionStatuses.Completed, convertedText);
+    }
+
+    // Mark conversion as failed
+    public async Task MarkConversionFailed(int id, string error)
+    {
+        await UpdateConversionStatus(id, ConversionStatuses.Failed, error: error);
+    }
+
+    // Mark conversion as skipped (e.g., text messages)
+    public async Task MarkConversionSkipped(int id)
+    {
+        await UpdateConversionStatus(id, ConversionStatuses.Skipped);
+    }
+
+    // Mark conversion as unavailable (service not available)
+    public async Task MarkConversionUnavailable(int id)
+    {
+        await UpdateConversionStatus(id, ConversionStatuses.Unavailable);
+    }
 }
 
 public class MessageQuery
@@ -127,6 +177,20 @@ public class MessageQuery
     public MessageQuery Limit(int count) { _limit = count; return this; }
     public MessageQuery WithForwardInfo() { _query = _query.Include(m => m.ForwardSource); return this; }
     public MessageQuery WithAnalysis() { _query = _query.Include(m => m.AnalysisResult); return this; }
+
+    // Media and conversion queries
+    public MessageQuery MediaOnly()
+    {
+        _query = _query.Where(m => m.ContentType != ContentTypes.Text && !string.IsNullOrEmpty(m.FileId));
+        return this;
+    }
+    public MessageQuery WithConversionStatus(string status) { _query = _query.Where(m => m.ConversionStatus == status); return this; }
+    public MessageQuery WithConvertedText() { _query = _query.Where(m => !string.IsNullOrEmpty(m.ConvertedText)); return this; }
+    public MessageQuery SearchText(string keyword)
+    {
+        _query = _query.Where(m => m.Content.Contains(keyword) || m.ConvertedText.Contains(keyword));
+        return this;
+    }
 
     public async Task<List<Message>> ToListAsync() => await _query.Take(_limit).ToListAsync();
     public async Task<Message> FirstAsync() => await _query.FirstOrDefaultAsync();
