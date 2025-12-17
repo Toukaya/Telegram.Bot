@@ -13,6 +13,8 @@ namespace ForwardAnalyzerBot.Bot;
 
 public class MessageHandler
 {
+    private const string Tag = "Handler";
+
     private readonly ITelegramBotClient _bot;
     private readonly TaskPool _taskPool;
     private readonly ScriptRunner _scriptRunner;
@@ -49,6 +51,7 @@ public class MessageHandler
         // Check if this is a forwarded message
         if (message.ForwardOrigin == null)
         {
+            Logger.Debug(Tag, $"Non-forwarded message from chat {chatId}, skipping");
             await _bot.SendMessage(
                 chatId: chatId,
                 text: "Please forward a message to me for analysis.",
@@ -62,6 +65,8 @@ public class MessageHandler
         var queueMessage = pendingCount > 0
             ? $"Added to analysis queue. Position: {pendingCount + 1}"
             : "Processing your message...";
+
+        Logger.Info(Tag, $"Forwarded message queued (pending: {pendingCount})");
 
         await _bot.SendMessage(
             chatId: chatId,
@@ -79,22 +84,26 @@ public class MessageHandler
     private async Task ProcessForwardedMessageAsync(TelegramMessage message, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
             // Extract forward information
             var result = ForwardInfoExtractor.Extract(message);
+            Logger.Debug(Tag, $"Extracted forward info: type={result.Sender.Type}, sender={result.Sender.Name}");
 
             // Store user and chat info
             await StoreUserAndChatAsync(message);
 
             // Store message in database
             var dbMessage = await StoreMessageAsync(message, result);
+            Logger.Debug(Tag, $"Message stored: id={dbMessage.Id}");
 
             // Use plugin system if available, otherwise fall back to scripts
             if (_analyzerService != null)
             {
                 // Use C# plugin system
+                Logger.Debug(Tag, "Running analysis via plugin system");
                 var context = AnalyzerService.CreateContext(result.Content);
                 result.Analysis = await _analyzerService.RunAnalysisAsync(context, ct);
             }
@@ -102,6 +111,7 @@ public class MessageHandler
             {
                 // Fall back to shell scripts (legacy)
                 bool isMedia = IsMediaContent(result.Content.Type);
+                Logger.Debug(Tag, $"Running analysis via script (media={isMedia})");
 
                 if (isMedia)
                 {
@@ -121,6 +131,9 @@ public class MessageHandler
             // Store analysis result
             await StoreAnalysisResultAsync(dbMessage.Id, result);
 
+            sw.Stop();
+            Logger.Info(Tag, $"Analysis complete: success={result.Analysis.Success}, time={sw.ElapsedMilliseconds}ms");
+
             // Send JSON result
             var json = result.ToJson();
 
@@ -128,6 +141,7 @@ public class MessageHandler
             if (json.Length > 4000)
             {
                 // Send as document
+                Logger.Debug(Tag, $"Result too long ({json.Length} chars), sending as file");
                 using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
                 stream.Position = 0;
 
@@ -150,7 +164,8 @@ public class MessageHandler
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MessageHandler] Error processing message: {ex.Message}");
+            sw.Stop();
+            Logger.Error(Tag, $"Error processing message after {sw.ElapsedMilliseconds}ms", ex);
 
             try
             {

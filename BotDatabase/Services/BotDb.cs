@@ -1,27 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using BotDatabase.Entities;
 
 namespace BotDatabase.Services;
 
-/// <summary>
-/// Main database service with fluent API.
-///
-/// Usage:
-///   var db = new BotDb("bot.db");
-///   await db.InitializeAsync();
-///
-///   // Store message
-///   var msg = await db.Messages.Store(message);
-///
-///   // Query messages
-///   var recent = await db.Messages.FromChat(chatId).Recent(20).ToListAsync();
-///
-///   // Create todo
-///   var todo = await db.Todos.Create("Review article").ForUser(userId).ExecuteAsync();
-/// </summary>
 public class BotDb : IDisposable
 {
+    private const string Tag = "BotDb";
+
     private readonly BotDbContext _context;
+    private readonly string _dbPath;
     private bool _disposed;
 
     public MessageRepository Messages { get; }
@@ -33,6 +24,7 @@ public class BotDb : IDisposable
 
     public BotDb(string dbPath = "bot.db")
     {
+        _dbPath = dbPath;
         _context = new BotDbContext(dbPath);
         Messages = new MessageRepository(_context);
         Users = new UserRepository(_context);
@@ -40,16 +32,20 @@ public class BotDb : IDisposable
         Todos = new TodoRepository(_context);
         Notes = new NoteRepository(_context);
         Analysis = new AnalysisRepository(_context);
+        DbLogger.Debug(Tag, $"Initialized with path: {dbPath}");
     }
 
     public async Task InitializeAsync()
     {
+        DbLogger.Debug(Tag, "Ensuring database exists...");
         await _context.Database.EnsureCreatedAsync();
+        DbLogger.Info(Tag, $"Database initialized: {_dbPath}");
     }
 
     public async Task SaveAsync()
     {
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, "Changes saved");
     }
 
     public void Dispose()
@@ -57,6 +53,7 @@ public class BotDb : IDisposable
         if (_disposed) return;
         _disposed = true;
         _context.Dispose();
+        DbLogger.Debug(Tag, "Disposed");
     }
 }
 
@@ -64,6 +61,7 @@ public class BotDb : IDisposable
 
 public class MessageRepository
 {
+    private const string Tag = "Messages";
     private readonly BotDbContext _context;
 
     public MessageRepository(BotDbContext context) => _context = context;
@@ -73,22 +71,27 @@ public class MessageRepository
         message.CreatedAt = DateTime.UtcNow;
         _context.Messages.Add(message);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Stored message id={message.Id}, chat={message.ChatId}");
         return message;
     }
 
     public async Task<Message> Find(int id)
     {
-        return await _context.Messages
+        var msg = await _context.Messages
             .Include(m => m.ForwardSource)
             .Include(m => m.AnalysisResult)
             .FirstOrDefaultAsync(m => m.Id == id);
+        DbLogger.Debug(Tag, msg != null ? $"Found message id={id}" : $"Message id={id} not found");
+        return msg;
     }
 
     public async Task<Message> FindByTelegramId(long messageId, long chatId)
     {
-        return await _context.Messages
+        var msg = await _context.Messages
             .Include(m => m.ForwardSource)
             .FirstOrDefaultAsync(m => m.TelegramMessageId == messageId && m.ChatId == chatId);
+        DbLogger.Debug(Tag, msg != null ? $"Found tg message {messageId} in chat {chatId}" : $"Tg message {messageId} not found in chat {chatId}");
+        return msg;
     }
 
     public async Task<bool> Exists(long telegramMessageId, long chatId)
@@ -134,6 +137,7 @@ public class MessageQuery
 
 public class UserRepository
 {
+    private const string Tag = "Users";
     private readonly BotDbContext _context;
 
     public UserRepository(BotDbContext context) => _context = context;
@@ -155,7 +159,12 @@ public class UserRepository
             if (!string.IsNullOrEmpty(username) && user.Username != username) { user.Username = username; changed = true; }
             if (!string.IsNullOrEmpty(firstName) && user.FirstName != firstName) { user.FirstName = firstName; changed = true; }
             if (!string.IsNullOrEmpty(lastName) && user.LastName != lastName) { user.LastName = lastName; changed = true; }
-            if (changed) { user.UpdatedAt = DateTime.UtcNow; await _context.SaveChangesAsync(); }
+            if (changed)
+            {
+                user.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                DbLogger.Debug(Tag, $"Updated user {userId} (@{username})");
+            }
             return user;
         }
 
@@ -170,6 +179,7 @@ public class UserRepository
         };
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created user {userId} (@{username})");
         return user;
     }
 
@@ -181,6 +191,7 @@ public class UserRepository
 
 public class ChatRepository
 {
+    private const string Tag = "Chats";
     private readonly BotDbContext _context;
 
     public ChatRepository(BotDbContext context) => _context = context;
@@ -196,7 +207,12 @@ public class ChatRepository
             if (!string.IsNullOrEmpty(chatType) && chat.ChatType != chatType) { chat.ChatType = chatType; changed = true; }
             if (!string.IsNullOrEmpty(title) && chat.Title != title) { chat.Title = title; changed = true; }
             if (!string.IsNullOrEmpty(username) && chat.Username != username) { chat.Username = username; changed = true; }
-            if (changed) { chat.UpdatedAt = DateTime.UtcNow; await _context.SaveChangesAsync(); }
+            if (changed)
+            {
+                chat.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                DbLogger.Debug(Tag, $"Updated chat {chatId} ({title})");
+            }
             return chat;
         }
 
@@ -211,6 +227,7 @@ public class ChatRepository
         };
         _context.Chats.Add(chat);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created chat {chatId} type={chatType}");
         return chat;
     }
 
@@ -222,6 +239,7 @@ public class ChatRepository
 
 public class TodoRepository
 {
+    private const string Tag = "Todos";
     private readonly BotDbContext _context;
 
     public TodoRepository(BotDbContext context) => _context = context;
@@ -239,6 +257,7 @@ public class TodoRepository
             todo.CompletedAt = DateTime.UtcNow;
             todo.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Completed todo {id}: {todo.Title}");
         }
     }
 
@@ -250,6 +269,7 @@ public class TodoRepository
             todo.Status = TodoStatus.Cancelled;
             todo.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Cancelled todo {id}: {todo.Title}");
         }
     }
 
@@ -260,6 +280,7 @@ public class TodoRepository
         {
             _context.Todos.Remove(todo);
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted todo {id}");
         }
     }
 
@@ -271,6 +292,7 @@ public class TodoRepository
 
 public class TodoBuilder
 {
+    private const string Tag = "Todos";
     private readonly BotDbContext _context;
     private readonly Todo _todo;
 
@@ -298,6 +320,7 @@ public class TodoBuilder
     {
         _context.Todos.Add(_todo);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created todo {_todo.Id}: {_todo.Title}");
         return _todo;
     }
 }
@@ -332,6 +355,7 @@ public class TodoQuery
 
 public class NoteRepository
 {
+    private const string Tag = "Notes";
     private readonly BotDbContext _context;
 
     public NoteRepository(BotDbContext context) => _context = context;
@@ -347,6 +371,7 @@ public class NoteRepository
         {
             _context.Notes.Remove(note);
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted note {id}");
         }
     }
 
@@ -358,6 +383,7 @@ public class NoteRepository
             note.IsPinned = true;
             note.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Pinned note {id}: {note.Title}");
         }
     }
 
@@ -369,6 +395,7 @@ public class NoteRepository
             note.IsPinned = false;
             note.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Unpinned note {id}: {note.Title}");
         }
     }
 
@@ -379,6 +406,7 @@ public class NoteRepository
 
 public class NoteBuilder
 {
+    private const string Tag = "Notes";
     private readonly BotDbContext _context;
     private readonly Note _note;
 
@@ -403,6 +431,7 @@ public class NoteBuilder
     {
         _context.Notes.Add(_note);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created note {_note.Id}: {_note.Title}");
         return _note;
     }
 }
@@ -436,6 +465,7 @@ public class NoteQuery
 
 public class AnalysisRepository
 {
+    private const string Tag = "Analysis";
     private readonly BotDbContext _context;
 
     public AnalysisRepository(BotDbContext context) => _context = context;
@@ -445,6 +475,7 @@ public class AnalysisRepository
         result.CreatedAt = DateTime.UtcNow;
         _context.AnalysisResults.Add(result);
         await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Stored analysis {result.Id} for message {result.MessageId}, status={result.Status}");
         return result;
     }
 
@@ -466,6 +497,7 @@ public class AnalysisRepository
             analysis.ExecutionTimeMs = executionTimeMs;
             analysis.CompletedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Analysis {id} completed in {executionTimeMs}ms");
         }
     }
 
@@ -479,6 +511,7 @@ public class AnalysisRepository
             analysis.ExitCode = exitCode;
             analysis.CompletedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+            DbLogger.Warn(Tag, $"Analysis {id} failed: {error}");
         }
     }
 

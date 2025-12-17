@@ -13,6 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../TelegramBotService/TelegramBotService.csproj" />
-    <ProjectReference Include="BotDatabase/BotDatabase.csproj" />
+    <ProjectReference Include="../BotDatabase/BotDatabase.csproj" />
   </ItemGroup>
 </Project>

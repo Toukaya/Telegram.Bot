@@ -9,6 +9,8 @@ namespace ForwardAnalyzerBot.Bot;
 
 public class BotService : IDisposable
 {
+    private const string Tag = "Bot";
+
     private readonly TelegramBotClient _bot;
     private readonly TaskPool _taskPool;
     private readonly ScriptRunner _scriptRunner;
@@ -28,6 +30,7 @@ public class BotService : IDisposable
         _scriptRunner = new ScriptRunner(textScriptPath, mediaScriptPath, scriptTimeout);
         _messageHandler = new MessageHandler(_bot, _taskPool, _scriptRunner, _db);
         _usePlugins = false;
+        Logger.Debug(Tag, "Initialized with shell scripts mode");
     }
 
     // New constructor - uses C# plugin system
@@ -39,27 +42,28 @@ public class BotService : IDisposable
         _analyzerService = analyzerService;
         _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db);
         _usePlugins = true;
+        Logger.Debug(Tag, "Initialized with plugin system mode");
     }
 
     public async Task StartAsync()
     {
         var me = await _bot.GetMe();
-        Console.WriteLine($"[BotService] Bot started: @{me.Username} (ID: {me.Id})");
+        Logger.Info(Tag, $"Bot started: @{me.Username} (ID: {me.Id})");
 
         if (_usePlugins)
         {
-            Console.WriteLine($"[BotService] Using C# plugin system with {_analyzerService.Analyzers.Count} analyzers");
+            Logger.Info(Tag, $"Using C# plugin system with {_analyzerService.Analyzers.Count} analyzers");
         }
         else
         {
             if (!_scriptRunner.IsTextScriptAvailable())
             {
-                Console.WriteLine("[BotService] Warning: Text analysis script not found.");
+                Logger.Warn(Tag, "Text analysis script not found");
             }
 
             if (!_scriptRunner.IsMediaScriptAvailable())
             {
-                Console.WriteLine("[BotService] Warning: Media analysis script not found.");
+                Logger.Warn(Tag, "Media analysis script not found");
             }
         }
 
@@ -76,19 +80,19 @@ public class BotService : IDisposable
             cancellationToken: _cts.Token
         );
 
-        Console.WriteLine("[BotService] Listening for messages...");
+        Logger.Info(Tag, "Listening for messages...");
     }
 
     public async Task StopAsync()
     {
-        Console.WriteLine("[BotService] Stopping...");
+        Logger.Info(Tag, "Stopping...");
 
         _cts.Cancel();
 
         // Wait for pending tasks to complete
         await _taskPool.StopAsync();
 
-        Console.WriteLine("[BotService] Stopped.");
+        Logger.Info(Tag, "Stopped");
     }
 
     private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
@@ -100,9 +104,9 @@ public class BotService : IDisposable
 
         var message = update.Message;
         var sender = message.From;
-        var senderName = sender != null ? sender.Username : "Unknown";
+        var senderName = sender != null ? $"@{sender.Username}" : "Unknown";
 
-        Console.WriteLine($"[BotService] Received message from @{senderName} in chat {message.Chat.Id}");
+        Logger.Info(Tag, $"Message from {senderName} in chat {message.Chat.Id}");
 
         try
         {
@@ -110,13 +114,13 @@ public class BotService : IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[BotService] Error handling update: {ex.Message}");
+            Logger.Error(Tag, "Error handling update", ex);
         }
     }
 
     private Task HandleErrorAsync(ITelegramBotClient bot, Exception exception, CancellationToken ct)
     {
-        Console.WriteLine($"[BotService] Error: {exception.Message}");
+        Logger.Error(Tag, "Telegram error", exception);
         return Task.CompletedTask;
     }
 
@@ -125,6 +129,7 @@ public class BotService : IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        Logger.Debug(Tag, "Disposing resources");
         _cts.Cancel();
         _taskPool.Dispose();
         _analyzerService?.Dispose();
