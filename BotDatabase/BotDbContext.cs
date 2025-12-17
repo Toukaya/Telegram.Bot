@@ -12,6 +12,7 @@ public class BotDbContext : DbContext
     public DbSet<AnalysisResult> AnalysisResults { get; set; }
     public DbSet<Todo> Todos { get; set; }
     public DbSet<Note> Notes { get; set; }
+    public DbSet<MediaFile> MediaFiles { get; set; }
 
     private readonly string _dbPath;
 
@@ -120,6 +121,17 @@ public class BotDbContext : DbContext
                 .WithMany(u => u.Notes)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // MediaFile
+        modelBuilder.Entity<MediaFile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ChatId);
+            entity.HasIndex(e => e.TelegramFileUniqueId);
+            entity.HasIndex(e => e.ConvertStatus);
+            entity.HasIndex(e => e.IsIndexed);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

@@ -21,6 +21,7 @@ public class BotDb : IDisposable
     public TodoRepository Todos { get; }
     public NoteRepository Notes { get; }
     public AnalysisRepository Analysis { get; }
+    public MediaFileRepository MediaFiles { get; }
 
     public BotDb(string dbPath = "bot.db")
     {
@@ -32,6 +33,7 @@ public class BotDb : IDisposable
         Todos = new TodoRepository(_context);
         Notes = new NoteRepository(_context);
         Analysis = new AnalysisRepository(_context);
+        MediaFiles = new MediaFileRepository(_context);
         DbLogger.Debug(Tag, $"Initialized with path: {dbPath}");
     }
 
@@ -601,4 +603,176 @@ public class AnalysisQuery
 
     public async Task<List<AnalysisResult>> ToListAsync() => await _query.Take(_limit).ToListAsync();
     public async Task<int> CountAsync() => await _query.CountAsync();
+}
+
+// ========== MediaFile Repository ==========
+
+public class MediaFileRepository
+{
+    private const string Tag = "MediaFiles";
+    private readonly BotDbContext _context;
+
+    public MediaFileRepository(BotDbContext context) => _context = context;
+
+    // Create new media file record
+    public async Task<MediaFile> Create(MediaFile mediaFile)
+    {
+        if (string.IsNullOrEmpty(mediaFile.Id))
+        {
+            mediaFile.Id = Guid.NewGuid().ToString("N");
+        }
+        mediaFile.CreatedAt = DateTime.UtcNow;
+        mediaFile.UpdatedAt = DateTime.UtcNow;
+
+        _context.MediaFiles.Add(mediaFile);
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created media file {mediaFile.Id}, type={mediaFile.FileType}");
+        return mediaFile;
+    }
+
+    // Find by ID
+    public async Task<MediaFile> Find(string id)
+    {
+        return await _context.MediaFiles.FindAsync(id);
+    }
+
+    // Find by Telegram file unique ID (for deduplication)
+    public async Task<MediaFile> FindByTelegramFileId(string telegramFileUniqueId)
+    {
+        return await _context.MediaFiles
+            .FirstOrDefaultAsync(m => m.TelegramFileUniqueId == telegramFileUniqueId);
+    }
+
+    // Check if file exists by Telegram unique ID
+    public async Task<bool> Exists(string telegramFileUniqueId)
+    {
+        return await _context.MediaFiles
+            .AnyAsync(m => m.TelegramFileUniqueId == telegramFileUniqueId);
+    }
+
+    // Update conversion status
+    public async Task UpdateConvertStatus(string id, string status, string textContent = null, string error = null)
+    {
+        var file = await _context.MediaFiles.FindAsync(id);
+        if (file != null)
+        {
+            file.ConvertStatus = status;
+            file.UpdatedAt = DateTime.UtcNow;
+
+            if (textContent != null)
+            {
+                file.TextContent = textContent;
+            }
+            if (error != null)
+            {
+                file.ConvertError = error;
+            }
+            if (status == MediaConvertStatus.Completed || status == MediaConvertStatus.Failed)
+            {
+                file.ConvertedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Updated convert status for {id}: {status}");
+        }
+    }
+
+    // Mark as converted
+    public async Task MarkConverted(string id, string textContent)
+    {
+        await UpdateConvertStatus(id, MediaConvertStatus.Completed, textContent);
+    }
+
+    // Mark conversion failed
+    public async Task MarkConvertFailed(string id, string error)
+    {
+        await UpdateConvertStatus(id, MediaConvertStatus.Failed, error: error);
+    }
+
+    // Mark as indexed in Kernel Memory
+    public async Task MarkIndexed(string id)
+    {
+        var file = await _context.MediaFiles.FindAsync(id);
+        if (file != null)
+        {
+            file.IsIndexed = true;
+            file.IndexedAt = DateTime.UtcNow;
+            file.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Marked {id} as indexed");
+        }
+    }
+
+    // Delete
+    public async Task<bool> Delete(string id)
+    {
+        var file = await _context.MediaFiles.FindAsync(id);
+        if (file != null)
+        {
+            _context.MediaFiles.Remove(file);
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted media file {id}");
+            return true;
+        }
+        return false;
+    }
+
+    // Queries
+    public MediaFileQuery FromChat(long chatId) => new MediaFileQuery(_context).FromChat(chatId);
+    public MediaFileQuery OfType(string fileType) => new MediaFileQuery(_context).OfType(fileType);
+    public MediaFileQuery PendingConversion() => new MediaFileQuery(_context).WithConvertStatus(MediaConvertStatus.Pending);
+    public MediaFileQuery NotIndexed() => new MediaFileQuery(_context).NotIndexed();
+    public MediaFileQuery Recent(int count = 20) => new MediaFileQuery(_context).Recent(count);
+}
+
+public class MediaFileQuery
+{
+    private readonly BotDbContext _context;
+    private IQueryable<MediaFile> _query;
+    private int _limit = 50;
+
+    public MediaFileQuery(BotDbContext context)
+    {
+        _context = context;
+        _query = context.MediaFiles.AsQueryable();
+    }
+
+    public MediaFileQuery FromChat(long chatId) { _query = _query.Where(m => m.ChatId == chatId); return this; }
+    public MediaFileQuery FromUser(long userId) { _query = _query.Where(m => m.UserId == userId); return this; }
+    public MediaFileQuery OfType(string fileType) { _query = _query.Where(m => m.FileType == fileType); return this; }
+    public MediaFileQuery WithConvertStatus(string status) { _query = _query.Where(m => m.ConvertStatus == status); return this; }
+    public MediaFileQuery Converted() { _query = _query.Where(m => m.ConvertStatus == MediaConvertStatus.Completed); return this; }
+    public MediaFileQuery NotIndexed() { _query = _query.Where(m => !m.IsIndexed); return this; }
+    public MediaFileQuery Indexed() { _query = _query.Where(m => m.IsIndexed); return this; }
+    public MediaFileQuery After(DateTime date) { _query = _query.Where(m => m.CreatedAt > date); return this; }
+    public MediaFileQuery Before(DateTime date) { _query = _query.Where(m => m.CreatedAt < date); return this; }
+    public MediaFileQuery Today()
+    {
+        var today = DateTime.UtcNow.Date;
+        _query = _query.Where(m => m.CreatedAt >= today);
+        return this;
+    }
+    public MediaFileQuery Recent(int count) { _limit = count; _query = _query.OrderByDescending(m => m.CreatedAt); return this; }
+    public MediaFileQuery Limit(int count) { _limit = count; return this; }
+
+    // Search in text content
+    public MediaFileQuery SearchText(string keyword)
+    {
+        _query = _query.Where(m => m.TextContent.Contains(keyword));
+        return this;
+    }
+
+    public async Task<List<MediaFile>> ToListAsync() => await _query.Take(_limit).ToListAsync();
+    public async Task<MediaFile> FirstAsync() => await _query.FirstOrDefaultAsync();
+    public async Task<int> CountAsync() => await _query.CountAsync();
+
+    // Get all text content (for summary generation)
+    public async Task<List<string>> GetAllTextAsync()
+    {
+        return await _query
+            .Where(m => !string.IsNullOrEmpty(m.TextContent))
+            .Select(m => m.TextContent)
+            .Take(_limit)
+            .ToListAsync();
+    }
 }
