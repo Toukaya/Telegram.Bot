@@ -1,11 +1,15 @@
 using ForwardAnalyzerBot.Bot;
 using ForwardAnalyzerBot.Services;
 using BotDatabase.Services;
+using DotNetEnv;
 
 class Program
 {
     static async Task Main(string[] args)
     {
+        // Load .env file
+        Env.Load();
+
         // Configuration
         var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         var usePlugins = Environment.GetEnvironmentVariable("USE_PLUGINS")?.ToLower() == "true";

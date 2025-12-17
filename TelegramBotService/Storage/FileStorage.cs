@@ -104,10 +104,13 @@ public class FileStorage
             var (localPath, relativePath) = GeneratePath(fileType, extension, fileId);
             EnsureDirectoryExists(Path.GetDirectoryName(localPath));
 
-            using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write);
-            await stream.CopyToAsync(fileStream, ct);
-
-            var fileSize = new FileInfo(localPath).Length;
+            long fileSize;
+            using (var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write))
+            {
+                await stream.CopyToAsync(fileStream, ct);
+                await fileStream.FlushAsync(ct);
+                fileSize = fileStream.Length;
+            }
 
             if (fileSize > _config.MaxFileSizeBytes)
             {

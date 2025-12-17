@@ -1,0 +1,49 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/ForwardAnalyzerBot/">
+    <Project Path="BotDatabase/BotDatabase.csproj" />
+    <Project Path="ForwardAnalyzerBot/ForwardAnalyzerBot.csproj" />
+    <Project Path="TelegramBotService/TelegramBotService.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="CHANGELOG.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="global.json" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="THIRD_PARTY_NOTICES" />
+  </Folder>
+  <Folder Name="/Solution Items/.azure-pipelines/">
+    <File Path=".azure-pipelines/ci.yml" />
+    <File Path=".azure-pipelines/external-release-publish.yml" />
+    <File Path=".azure-pipelines/full-integration-tests.yml" />
+    <File Path=".azure-pipelines/non-interactive-integration-tests.yml" />
+    <File Path=".azure-pipelines/release-pipeline.yml" />
+    <File Path=".azure-pipelines/variables.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/.azure-pipelines/jobs/">
+    <File Path=".azure-pipelines/jobs/run-integration-tests.yml" />
+    <File Path=".azure-pipelines/jobs/run-unit-tests.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/.devcontainer/">
+    <File Path=".devcontainer/devcontainer.json" />
+    <File Path=".devcontainer/docker-compose.yml" />
+    <File Path=".devcontainer/Dockerfile" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Telegram.Bot/Telegram.Bot.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Telegram.Bot.Tests.Integ/Telegram.Bot.Tests.Integ.csproj" />
+    <Project Path="test/Telegram.Bot.Tests.Unit/Telegram.Bot.Tests.Unit.csproj" />
+  </Folder>
+  <Project Path="TelegramBotService.Tests/TelegramBotService.Tests.csproj" />
+</Solution>
