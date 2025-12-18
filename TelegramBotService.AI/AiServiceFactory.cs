@@ -1,12 +1,10 @@
-using TelegramBotService.Configuration;
-
 namespace TelegramBotService.AI;
 
 // Factory for creating AI services based on configuration
 public static class AiServiceFactory
 {
     // Create AI service based on configuration
-    public static IAiService Create(AiConfig config)
+    public static IAiService Create(AiServiceConfig config)
     {
         if (config == null || !config.Enabled)
         {
@@ -35,7 +33,7 @@ public static class AiServiceFactory
     // Create service with explicit provider
     public static IAiService CreateOpenAi(string apiKey, string model = "gpt-4o-mini")
     {
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "openai",
@@ -48,7 +46,7 @@ public static class AiServiceFactory
     // Create Ollama service with explicit endpoint
     public static IAiService CreateOllama(string endpoint = "http://localhost:11434", string model = "llama3")
     {
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "ollama",

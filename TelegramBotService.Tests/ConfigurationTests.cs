@@ -15,7 +15,6 @@ public class ConfigurationTests
         Assert.NotNull(config.Storage);
         Assert.NotNull(config.MediaConversion);
         Assert.NotNull(config.Memory);
-        Assert.NotNull(config.Ai);
 
         Assert.Equal("./storage", config.Storage.BasePath);
         Assert.Equal("./bot.db", config.Storage.DatabasePath);
@@ -27,9 +26,6 @@ public class ConfigurationTests
 
         Assert.False(config.Memory.Enabled);
         Assert.Equal("sqlite", config.Memory.Backend);
-
-        Assert.False(config.Ai.Enabled);
-        Assert.Equal("ollama", config.Ai.Provider);
     }
 
     [Fact]
@@ -185,18 +181,4 @@ public class ConfigurationTests
         Assert.Contains(errors, e => e.Contains("QdrantEndpoint") && e.Contains("valid URL"));
     }
 
-    [Fact]
-    public void Should_Report_Error_For_Invalid_AI_Provider()
-    {
-        // Arrange
-        var config = new BotConfiguration();
-        config.Ai.Enabled = true;
-        config.Ai.Provider = "invalid_provider";
-
-        // Act
-        var errors = ConfigurationValidator.Validate(config);
-
-        // Assert
-        Assert.Contains(errors, e => e.Contains("Ai.Provider"));
-    }
 }

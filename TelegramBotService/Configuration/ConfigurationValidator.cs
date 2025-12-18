@@ -17,9 +17,6 @@ public static class ConfigurationValidator
         // Validate Memory configuration
         ValidateMemory(config.Memory, errors);
 
-        // Validate AI configuration
-        ValidateAi(config.Ai, errors);
-
         return errors;
     }
 
@@ -152,46 +149,6 @@ public static class ConfigurationValidator
             if (!Uri.TryCreate(config.QdrantEndpoint, UriKind.Absolute, out _))
             {
                 errors.Add("Memory.QdrantEndpoint must be a valid URL");
-            }
-        }
-    }
-
-    private static void ValidateAi(AiConfig config, List<string> errors)
-    {
-        if (!config.Enabled)
-        {
-            return;  // Skip validation if disabled
-        }
-
-        var validProviders = new[] { "ollama", "openai" };
-        if (!validProviders.Contains(config.Provider.ToLower()))
-        {
-            errors.Add($"Ai.Provider must be one of: {string.Join(", ", validProviders)}");
-        }
-
-        if (string.IsNullOrWhiteSpace(config.Model))
-        {
-            errors.Add("Ai.Model cannot be empty when AI is enabled");
-        }
-
-        if (config.Provider.ToLower() == "openai")
-        {
-            if (string.IsNullOrWhiteSpace(config.OpenAiApiKey))
-            {
-                errors.Add("Ai.OpenAiApiKey is required when using OpenAI");
-            }
-        }
-
-        if (config.Provider.ToLower() == "ollama")
-        {
-            if (string.IsNullOrWhiteSpace(config.OllamaEndpoint))
-            {
-                errors.Add("Ai.OllamaEndpoint is required when using Ollama");
-            }
-
-            if (!Uri.TryCreate(config.OllamaEndpoint, UriKind.Absolute, out _))
-            {
-                errors.Add("Ai.OllamaEndpoint must be a valid URL");
             }
         }
     }

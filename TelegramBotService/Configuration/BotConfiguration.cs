@@ -6,7 +6,6 @@ public class BotConfiguration
     public StorageConfig Storage { get; set; } = new();
     public MediaConversionConfig MediaConversion { get; set; } = new();
     public MemoryConfig Memory { get; set; } = new();
-    public AiConfig Ai { get; set; } = new();
 }
 
 // File storage configuration
@@ -49,13 +48,3 @@ public class MemoryConfig
     public int EmbeddingMaxTokens { get; set; } = 8192;
 }
 
-// AI service configuration (for summaries and answers)
-public class AiConfig
-{
-    public bool Enabled { get; set; } = false;
-    public string Provider { get; set; } = "ollama";  // ollama, openai
-    public string Model { get; set; } = "llama3";
-    public string OllamaEndpoint { get; set; } = "http://localhost:11434";
-    public string OpenAiApiKey { get; set; } = "";
-    public string OpenAiModel { get; set; } = "gpt-4o-mini";
-}

@@ -53,14 +53,6 @@ public static class ConfigurationLoader
         config.Memory.EmbeddingApiKey = GetEnv("EMBEDDING_API_KEY", config.Memory.EmbeddingApiKey);
         config.Memory.EmbeddingModel = GetEnv("EMBEDDING_MODEL", config.Memory.EmbeddingModel);
         config.Memory.EmbeddingMaxTokens = GetEnvInt("EMBEDDING_MAX_TOKENS", config.Memory.EmbeddingMaxTokens);
-
-        // AI
-        config.Ai.Enabled = GetEnvBool("ENABLE_AI", config.Ai.Enabled);
-        config.Ai.Provider = GetEnv("AI_PROVIDER", config.Ai.Provider);
-        config.Ai.Model = GetEnv("AI_MODEL", config.Ai.Model);
-        config.Ai.OllamaEndpoint = GetEnv("OLLAMA_ENDPOINT", config.Ai.OllamaEndpoint);
-        config.Ai.OpenAiApiKey = GetEnv("OPENAI_API_KEY", config.Ai.OpenAiApiKey);
-        config.Ai.OpenAiModel = GetEnv("OPENAI_MODEL", config.Ai.OpenAiModel);
     }
 
     private static string GetEnv(string key, string defaultValue)
@@ -110,7 +102,5 @@ public static class ConfigurationLoader
         Console.WriteLine($"  MediaConversion.WhisperModel: {config.MediaConversion.WhisperModel}");
         Console.WriteLine($"  Memory.Enabled: {config.Memory.Enabled}");
         Console.WriteLine($"  Memory.Backend: {config.Memory.Backend}");
-        Console.WriteLine($"  Ai.Enabled: {config.Ai.Enabled}");
-        Console.WriteLine($"  Ai.Provider: {config.Ai.Provider}");
     }
 }

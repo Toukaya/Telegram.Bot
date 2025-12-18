@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using OpenAI;
 using OpenAI.Chat;
-using TelegramBotService.Configuration;
 
 namespace TelegramBotService.AI;
 
@@ -10,7 +9,7 @@ public class OpenAiService : IAiService
 {
     private readonly ChatClient _chatClient;
     private readonly OpenAIClient _client;
-    private readonly AiConfig _config;
+    private readonly AiServiceConfig _config;
     private readonly string _defaultModel;
     private bool _isAvailable;
 
@@ -18,7 +17,7 @@ public class OpenAiService : IAiService
     public bool IsAvailable => _isAvailable;
     public string DefaultModel => _defaultModel;
 
-    public OpenAiService(AiConfig config)
+    public OpenAiService(AiServiceConfig config)
     {
         _config = config;
         _isAvailable = false;

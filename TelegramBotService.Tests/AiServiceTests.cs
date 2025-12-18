@@ -1,6 +1,5 @@
 using Xunit;
 using TelegramBotService.AI;
-using TelegramBotService.Configuration;
 
 namespace TelegramBotService.Tests;
 
@@ -86,7 +85,7 @@ public class AiServiceTests
     public void OpenAiService_Should_Not_Be_Available_When_Disabled()
     {
         // Arrange
-        var config = new AiConfig { Enabled = false };
+        var config = new AiServiceConfig { Enabled = false };
 
         // Act
         var service = new OpenAiService(config);
@@ -100,7 +99,7 @@ public class AiServiceTests
     public void OpenAiService_Should_Not_Be_Available_When_No_ApiKey()
     {
         // Arrange
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "openai",
@@ -118,7 +117,7 @@ public class AiServiceTests
     public async Task OpenAiService_Should_Return_Unavailable_When_Not_Configured()
     {
         // Arrange
-        var config = new AiConfig { Enabled = false };
+        var config = new AiServiceConfig { Enabled = false };
         var service = new OpenAiService(config);
 
         // Act
@@ -133,7 +132,7 @@ public class AiServiceTests
     public async Task OpenAiService_Should_List_Models()
     {
         // Arrange
-        var config = new AiConfig { Enabled = false };
+        var config = new AiServiceConfig { Enabled = false };
         var service = new OpenAiService(config);
 
         // Act
@@ -151,7 +150,7 @@ public class AiServiceTests
     public void OllamaService_Should_Not_Be_Available_When_Disabled()
     {
         // Arrange
-        var config = new AiConfig { Enabled = false };
+        var config = new AiServiceConfig { Enabled = false };
 
         // Act
         using var service = new OllamaService(config);
@@ -165,7 +164,7 @@ public class AiServiceTests
     public async Task OllamaService_Should_Return_Unavailable_When_Not_Running()
     {
         // Arrange - use unlikely endpoint (valid port but no service)
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "ollama",
@@ -189,7 +188,7 @@ public class AiServiceTests
     public void AiServiceFactory_Should_Return_Null_When_Disabled()
     {
         // Arrange
-        var config = new AiConfig { Enabled = false };
+        var config = new AiServiceConfig { Enabled = false };
 
         // Act
         var service = AiServiceFactory.Create(config);
@@ -202,7 +201,7 @@ public class AiServiceTests
     public void AiServiceFactory_Should_Create_OpenAiService()
     {
         // Arrange
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "openai",
@@ -221,7 +220,7 @@ public class AiServiceTests
     public void AiServiceFactory_Should_Create_OllamaService()
     {
         // Arrange
-        var config = new AiConfig
+        var config = new AiServiceConfig
         {
             Enabled = true,
             Provider = "ollama",

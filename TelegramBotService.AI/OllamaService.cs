@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using TelegramBotService.Configuration;
 
 namespace TelegramBotService.AI;
 
@@ -11,7 +10,7 @@ namespace TelegramBotService.AI;
 public class OllamaService : IAiService, IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly AiConfig _config;
+    private readonly AiServiceConfig _config;
     private readonly string _baseUrl;
     private readonly string _defaultModel;
     private bool _isAvailable;
@@ -21,7 +20,7 @@ public class OllamaService : IAiService, IDisposable
     public bool IsAvailable => _isAvailable;
     public string DefaultModel => _defaultModel;
 
-    public OllamaService(AiConfig config)
+    public OllamaService(AiServiceConfig config)
     {
         _config = config;
         _isAvailable = false;
