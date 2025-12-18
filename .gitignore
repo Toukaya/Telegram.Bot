@@ -217,3 +217,4 @@ bots/.env
 /ForwardAnalyzerBot/.env
 /ForwardAnalyzerBot/Properties/launchSettings.json
 .vscode/launch.json
+/.vscode/tasks.json
