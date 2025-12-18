@@ -1,4 +1,5 @@
 using Microsoft.KernelMemory;
+using Microsoft.KernelMemory.AI.OpenAI;
 using TelegramBotService.Pipeline;
 using TelegramBotService.Configuration;
 
@@ -86,21 +87,37 @@ public class KernelMemoryService : IMemoryService, IDisposable
 
     private void ConfigureEmbedding(IKernelMemoryBuilder builder, MemoryConfig config)
     {
-        switch (config.EmbeddingProvider.ToLower())
-        {
-            case "openai":
-                // To use OpenAI embeddings, add package: Microsoft.KernelMemory.AI.OpenAI
-                // Then uncomment and configure:
-                // builder.WithOpenAITextEmbeddingGeneration(new OpenAIConfig { ... });
-                Console.WriteLine("[KernelMemory] OpenAI embeddings require Microsoft.KernelMemory.AI.OpenAI package");
-                Console.WriteLine("[KernelMemory] Falling back to local embedding");
-                goto case "local";
+        var provider = config.EmbeddingProvider?.ToLower() ?? "siliconflow";
 
-            case "local":
+        if (string.IsNullOrEmpty(config.EmbeddingApiKey))
+        {
+            Console.WriteLine($"[KernelMemory] EmbeddingApiKey not configured, skipping embedding setup");
+            return;
+        }
+
+        switch (provider)
+        {
+            case "siliconflow":
+            case "openai":
+                var openAiConfig = new OpenAIConfig
+                {
+                    APIKey = config.EmbeddingApiKey,
+                    EmbeddingModel = config.EmbeddingModel,
+                    EmbeddingModelMaxTokenTotal = config.EmbeddingMaxTokens
+                };
+
+                // Set custom endpoint for SiliconFlow or other OpenAI-compatible APIs
+                if (!string.IsNullOrEmpty(config.EmbeddingEndpoint))
+                {
+                    openAiConfig.Endpoint = config.EmbeddingEndpoint;
+                }
+
+                builder.WithOpenAITextEmbeddingGeneration(openAiConfig);
+                Console.WriteLine($"[KernelMemory] Using {provider} embeddings: {config.EmbeddingModel} at {config.EmbeddingEndpoint}");
+                break;
+
             default:
-                // Use simple text-based matching (no vector embeddings)
-                // This is limited but works without external dependencies
-                Console.WriteLine("[KernelMemory] Using local text-based matching");
+                Console.WriteLine($"[KernelMemory] Unknown embedding provider: {provider}");
                 break;
         }
     }

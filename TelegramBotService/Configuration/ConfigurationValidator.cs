@@ -103,17 +103,34 @@ public static class ConfigurationValidator
             errors.Add($"Memory.Backend must be one of: {string.Join(", ", validBackends)}");
         }
 
-        var validProviders = new[] { "local", "openai" };
+        var validProviders = new[] { "siliconflow", "openai" };
         if (!validProviders.Contains(config.EmbeddingProvider.ToLower()))
         {
             errors.Add($"Memory.EmbeddingProvider must be one of: {string.Join(", ", validProviders)}");
         }
 
-        if (config.EmbeddingProvider.ToLower() == "openai")
+        // Validate embedding settings for siliconflow and openai
+        if (validProviders.Contains(config.EmbeddingProvider.ToLower()))
         {
-            if (string.IsNullOrWhiteSpace(config.OpenAiApiKey))
+            if (string.IsNullOrWhiteSpace(config.EmbeddingApiKey))
             {
-                errors.Add("Memory.OpenAiApiKey is required when using OpenAI embeddings");
+                errors.Add("Memory.EmbeddingApiKey is required when using embedding provider");
+            }
+
+            if (string.IsNullOrWhiteSpace(config.EmbeddingModel))
+            {
+                errors.Add("Memory.EmbeddingModel is required when using embedding provider");
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.EmbeddingEndpoint) &&
+                !Uri.TryCreate(config.EmbeddingEndpoint, UriKind.Absolute, out _))
+            {
+                errors.Add("Memory.EmbeddingEndpoint must be a valid URL");
+            }
+
+            if (config.EmbeddingMaxTokens <= 0)
+            {
+                errors.Add("Memory.EmbeddingMaxTokens must be greater than 0");
             }
         }
 

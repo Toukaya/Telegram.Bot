@@ -39,11 +39,14 @@ public class MemoryConfig
 {
     public bool Enabled { get; set; } = false;
     public string Backend { get; set; } = "sqlite";  // sqlite, qdrant, postgres
-    public string EmbeddingProvider { get; set; } = "local";  // local, openai
+    public string EmbeddingProvider { get; set; } = "siliconflow";  // siliconflow, openai
     public string SqliteStorePath { get; set; } = "./memory.db";
     public string QdrantEndpoint { get; set; } = "http://localhost:6333";
-    public string OpenAiApiKey { get; set; } = "";
-    public string OpenAiEmbeddingModel { get; set; } = "text-embedding-3-small";
+    // OpenAI / OpenAI-compatible embedding settings
+    public string EmbeddingEndpoint { get; set; } = "https://api.siliconflow.cn/v1";
+    public string EmbeddingApiKey { get; set; } = "";
+    public string EmbeddingModel { get; set; } = "BAAI/bge-m3";
+    public int EmbeddingMaxTokens { get; set; } = 8192;
 }
 
 // AI service configuration (for summaries and answers)

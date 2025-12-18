@@ -153,19 +153,19 @@ public class ConfigurationTests
     }
 
     [Fact]
-    public void Should_Report_Error_For_Missing_OpenAI_Key()
+    public void Should_Report_Error_For_Missing_Embedding_Api_Key()
     {
         // Arrange
         var config = new BotConfiguration();
         config.Memory.Enabled = true;
-        config.Memory.EmbeddingProvider = "openai";
-        config.Memory.OpenAiApiKey = "";
+        config.Memory.EmbeddingProvider = "siliconflow";
+        config.Memory.EmbeddingApiKey = "";
 
         // Act
         var errors = ConfigurationValidator.Validate(config);
 
         // Assert
-        Assert.Contains(errors, e => e.Contains("OpenAiApiKey"));
+        Assert.Contains(errors, e => e.Contains("EmbeddingApiKey"));
     }
 
     [Fact]
@@ -176,6 +176,7 @@ public class ConfigurationTests
         config.Memory.Enabled = true;
         config.Memory.Backend = "qdrant";
         config.Memory.QdrantEndpoint = "not_a_url";
+        config.Memory.EmbeddingApiKey = "test-key";  // Required for validation
 
         // Act
         var errors = ConfigurationValidator.Validate(config);

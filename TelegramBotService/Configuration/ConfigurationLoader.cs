@@ -49,8 +49,10 @@ public static class ConfigurationLoader
         config.Memory.EmbeddingProvider = GetEnv("EMBEDDING_PROVIDER", config.Memory.EmbeddingProvider);
         config.Memory.SqliteStorePath = GetEnv("MEMORY_SQLITE_PATH", config.Memory.SqliteStorePath);
         config.Memory.QdrantEndpoint = GetEnv("QDRANT_ENDPOINT", config.Memory.QdrantEndpoint);
-        config.Memory.OpenAiApiKey = GetEnv("OPENAI_API_KEY", config.Memory.OpenAiApiKey);
-        config.Memory.OpenAiEmbeddingModel = GetEnv("OPENAI_EMBEDDING_MODEL", config.Memory.OpenAiEmbeddingModel);
+        config.Memory.EmbeddingEndpoint = GetEnv("EMBEDDING_ENDPOINT", config.Memory.EmbeddingEndpoint);
+        config.Memory.EmbeddingApiKey = GetEnv("EMBEDDING_API_KEY", config.Memory.EmbeddingApiKey);
+        config.Memory.EmbeddingModel = GetEnv("EMBEDDING_MODEL", config.Memory.EmbeddingModel);
+        config.Memory.EmbeddingMaxTokens = GetEnvInt("EMBEDDING_MAX_TOKENS", config.Memory.EmbeddingMaxTokens);
 
         // AI
         config.Ai.Enabled = GetEnvBool("ENABLE_AI", config.Ai.Enabled);
