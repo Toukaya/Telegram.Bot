@@ -4,8 +4,21 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramBotService.Services;
+using TelegramBotService.Pipeline;
+using TelegramBotService.Storage;
+using TelegramBotService.MediaConverters;
 
 namespace ForwardAnalyzerBot.Bot;
+
+// Configuration for indexing services
+public class IndexingConfig
+{
+    public string TempPath { get; set; } = "./temp";
+    public string StoragePath { get; set; } = "./storage";
+    public IMemoryService MemoryService { get; set; }
+    public MediaConversionService ConversionService { get; set; }
+}
 
 public class BotService : IDisposable
 {
@@ -20,6 +33,14 @@ public class BotService : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly bool _usePlugins;
     private bool _disposed;
+
+    // Indexing services (optional)
+    private readonly TelegramFileService _fileService;
+    private readonly MediaProcessor _mediaProcessor;
+    private readonly ContentIndexer _contentIndexer;
+    private readonly SearchService _searchService;
+    private readonly MediaProcessingPipeline _pipeline;
+    private readonly bool _indexingEnabled;
 
     // Legacy constructor - uses shell scripts
     public BotService(string token, BotDb db, string textScriptPath, string mediaScriptPath, int concurrency = 1, int scriptTimeout = 30)
@@ -45,6 +66,54 @@ public class BotService : IDisposable
         Logger.Debug(Tag, "Initialized with plugin system mode");
     }
 
+    // Full constructor - uses C# plugin system with indexing services
+    public BotService(string token, BotDb db, AnalyzerService analyzerService, IndexingConfig indexingConfig, int concurrency = 1)
+    {
+        _bot = new TelegramBotClient(token);
+        _db = db;
+        _taskPool = new TaskPool(concurrency);
+        _analyzerService = analyzerService;
+        _usePlugins = true;
+
+        // Initialize indexing services if config provided
+        if (indexingConfig != null)
+        {
+            _indexingEnabled = true;
+
+            // Create file service
+            _fileService = new TelegramFileService(indexingConfig.TempPath);
+
+            // Create content indexer
+            var memoryService = indexingConfig.MemoryService ?? new NullMemoryService();
+            _contentIndexer = new ContentIndexer(memoryService);
+
+            // Create search service
+            _searchService = new SearchService(memoryService);
+
+            // Create processing pipeline
+            var fileStorage = new FileStorage(new FileStorageConfig { BasePath = indexingConfig.StoragePath });
+            var pipelineConfig = new PipelineConfig
+            {
+                EnableConversion = indexingConfig.ConversionService != null,
+                EnableIndexing = memoryService.IsAvailable
+            };
+            _pipeline = new MediaProcessingPipeline(fileStorage, indexingConfig.ConversionService, memoryService, pipelineConfig);
+
+            // Create media processor
+            _mediaProcessor = new MediaProcessor(_fileService, _pipeline, _contentIndexer);
+
+            // Create message handler with indexing services
+            _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db, _mediaProcessor, _contentIndexer, _searchService);
+
+            Logger.Debug(Tag, $"Initialized with plugin system + indexing (memory={memoryService.IsAvailable})");
+        }
+        else
+        {
+            _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db);
+            Logger.Debug(Tag, "Initialized with plugin system mode");
+        }
+    }
+
     public async Task StartAsync()
     {
         var me = await _bot.GetMe();
@@ -53,6 +122,13 @@ public class BotService : IDisposable
         if (_usePlugins)
         {
             Logger.Info(Tag, $"Using C# plugin system with {_analyzerService.Analyzers.Count} analyzers");
+
+            if (_indexingEnabled)
+            {
+                var searchAvailable = _searchService != null && _searchService.IsAvailable;
+                var indexAvailable = _contentIndexer != null && _contentIndexer.IsAvailable;
+                Logger.Info(Tag, $"Indexing enabled (search={searchAvailable}, index={indexAvailable})");
+            }
         }
         else
         {
@@ -133,6 +209,8 @@ public class BotService : IDisposable
         _cts.Cancel();
         _taskPool.Dispose();
         _analyzerService?.Dispose();
+        _mediaProcessor?.Dispose();
+        _pipeline?.Dispose();
         _db?.Dispose();
         _cts.Dispose();
     }

@@ -1,4 +1,5 @@
 using TelegramBotService;
+using TelegramBotService.Services;
 using ForwardAnalyzerBot.Models;
 using ForwardAnalyzerBot.Services;
 using BotDatabase.Services;
@@ -20,6 +21,11 @@ public class MessageHandler
     private readonly ScriptRunner _scriptRunner;
     private readonly AnalyzerService _analyzerService;
     private readonly BotDb _db;
+
+    // New indexing services
+    private readonly MediaProcessor _mediaProcessor;
+    private readonly ContentIndexer _contentIndexer;
+    private readonly SearchService _searchService;
 
     private static readonly HashSet<string> MediaTypes = new()
     {
@@ -44,19 +50,53 @@ public class MessageHandler
         _db = db;
     }
 
+    // Full constructor with indexing services
+    public MessageHandler(
+        ITelegramBotClient bot,
+        TaskPool taskPool,
+        AnalyzerService analyzerService,
+        BotDb db,
+        MediaProcessor mediaProcessor,
+        ContentIndexer contentIndexer,
+        SearchService searchService)
+    {
+        _bot = bot;
+        _taskPool = taskPool;
+        _analyzerService = analyzerService;
+        _db = db;
+        _mediaProcessor = mediaProcessor;
+        _contentIndexer = contentIndexer;
+        _searchService = searchService;
+    }
+
     public async Task HandleMessageAsync(TelegramMessage message, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
 
+        // Handle /search command
+        if (message.Text != null && message.Text.StartsWith("/search"))
+        {
+            await HandleSearchCommandAsync(message, ct);
+            return;
+        }
+
         // Check if this is a forwarded message
         if (message.ForwardOrigin == null)
         {
-            Logger.Debug(Tag, $"Non-forwarded message from chat {chatId}, skipping");
-            await _bot.SendMessage(
-                chatId: chatId,
-                text: "Please forward a message to me for analysis.",
-                cancellationToken: ct
-            );
+            // Not forwarded - try to index if it has content
+            if (HasMediaContent(message) || !string.IsNullOrEmpty(message.Text))
+            {
+                await IndexNonForwardedMessageAsync(message, ct);
+            }
+            else
+            {
+                Logger.Debug(Tag, $"Non-forwarded message from chat {chatId}, skipping");
+                await _bot.SendMessage(
+                    chatId: chatId,
+                    text: "Please forward a message to me for analysis, or send media/text to index.",
+                    cancellationToken: ct
+                );
+            }
             return;
         }
 
@@ -79,6 +119,187 @@ public class MessageHandler
         {
             await ProcessForwardedMessageAsync(message, ct);
         });
+    }
+
+    // Handle /search command
+    private async Task HandleSearchCommandAsync(TelegramMessage message, CancellationToken ct)
+    {
+        var chatId = message.Chat.Id;
+
+        if (_searchService == null || !_searchService.IsAvailable)
+        {
+            await _bot.SendMessage(chatId, "Search is not available.", cancellationToken: ct);
+            return;
+        }
+
+        // Extract query from command
+        var query = message.Text.Length > 7
+            ? message.Text.Substring(7).Trim()
+            : "";
+
+        if (string.IsNullOrEmpty(query))
+        {
+            await _bot.SendMessage(chatId, "Usage: /search <query>", cancellationToken: ct);
+            return;
+        }
+
+        Logger.Info(Tag, $"Search query: {query}");
+
+        try
+        {
+            var options = new SearchOptions
+            {
+                ChatId = chatId,
+                Limit = 10
+            };
+
+            var results = await _searchService.SearchAsync(query, options, ct);
+            var response = _searchService.FormatResults(results, query);
+
+            await _bot.SendMessage(chatId, response, cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(Tag, $"Search error: {ex.Message}", ex);
+            await _bot.SendMessage(chatId, $"Search failed: {ex.Message}", cancellationToken: ct);
+        }
+    }
+
+    // Index non-forwarded messages (media or text)
+    private async Task IndexNonForwardedMessageAsync(TelegramMessage message, CancellationToken ct)
+    {
+        var chatId = message.Chat.Id;
+
+        try
+        {
+            // Store user and chat
+            await StoreUserAndChatAsync(message);
+
+            if (HasMediaContent(message))
+            {
+                // Process media
+                if (_mediaProcessor == null)
+                {
+                    Logger.Debug(Tag, "Media processor not available");
+                    return;
+                }
+
+                Logger.Info(Tag, "Processing media for indexing...");
+                var result = await _mediaProcessor.ProcessAsync(_bot, message, ct);
+
+                if (result.Success)
+                {
+                    // Save MediaFile to database
+                    await SaveMediaFileAsync(message, result);
+
+                    var status = result.IsIndexed
+                        ? "Media processed and indexed"
+                        : "Media processed (indexing skipped)";
+
+                    await _bot.SendMessage(chatId, status, cancellationToken: ct);
+                }
+                else
+                {
+                    await _bot.SendMessage(chatId, $"Media processing failed: {result.Error}", cancellationToken: ct);
+                }
+            }
+            else if (!string.IsNullOrEmpty(message.Text))
+            {
+                // Index text
+                if (_contentIndexer == null || !_contentIndexer.IsAvailable)
+                {
+                    Logger.Debug(Tag, "Content indexer not available");
+                    return;
+                }
+
+                var indexed = await _contentIndexer.IndexTextMessageAsync(
+                    message.MessageId,
+                    chatId,
+                    message.From?.Id ?? 0,
+                    message.Text,
+                    message.Date,
+                    ct);
+
+                if (indexed)
+                {
+                    await _bot.SendMessage(chatId, "Text indexed", cancellationToken: ct);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(Tag, $"Indexing error: {ex.Message}", ex);
+        }
+    }
+
+    // Save MediaFile record to database
+    private async Task SaveMediaFileAsync(TelegramMessage message, MediaProcessResult result)
+    {
+        if (_db == null) return;
+
+        var mediaFile = new MediaFile
+        {
+            Id = result.MediaFileId,
+            TelegramFileId = ExtractFileId(message) ?? "",
+            TelegramFileUniqueId = ExtractFileUniqueId(message) ?? "",
+            ChatId = message.Chat.Id,
+            UserId = message.From?.Id ?? 0,
+            MessageId = message.MessageId,
+            FileType = result.FileType,
+            MimeType = result.MimeType,
+            FileName = result.FileName,
+            FileSize = result.FileSize,
+            LocalPath = result.LocalPath,
+            TextContent = result.TextContent,
+            ConvertStatus = result.IsConverted ? MediaConvertStatus.Completed : MediaConvertStatus.Skipped,
+            IsIndexed = result.IsIndexed,
+            IndexedAt = result.IsIndexed ? DateTime.UtcNow : DateTime.MinValue,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        await _db.MediaFiles.Create(mediaFile);
+        Logger.Debug(Tag, $"MediaFile saved: {mediaFile.Id}");
+    }
+
+    // Check if message has media content
+    private bool HasMediaContent(TelegramMessage message)
+    {
+        return message.Photo != null ||
+               message.Audio != null ||
+               message.Voice != null ||
+               message.Video != null ||
+               message.VideoNote != null ||
+               message.Document != null ||
+               message.Sticker != null;
+    }
+
+    // Extract file ID from message
+    private string ExtractFileId(TelegramMessage message)
+    {
+        if (message.Photo != null && message.Photo.Length > 0)
+            return message.Photo[^1].FileId;
+        if (message.Audio != null) return message.Audio.FileId;
+        if (message.Voice != null) return message.Voice.FileId;
+        if (message.Video != null) return message.Video.FileId;
+        if (message.VideoNote != null) return message.VideoNote.FileId;
+        if (message.Document != null) return message.Document.FileId;
+        if (message.Sticker != null) return message.Sticker.FileId;
+        return null;
+    }
+
+    // Extract file unique ID from message
+    private string ExtractFileUniqueId(TelegramMessage message)
+    {
+        if (message.Photo != null && message.Photo.Length > 0)
+            return message.Photo[^1].FileUniqueId;
+        if (message.Audio != null) return message.Audio.FileUniqueId;
+        if (message.Voice != null) return message.Voice.FileUniqueId;
+        if (message.Video != null) return message.Video.FileUniqueId;
+        if (message.VideoNote != null) return message.VideoNote.FileUniqueId;
+        if (message.Document != null) return message.Document.FileUniqueId;
+        if (message.Sticker != null) return message.Sticker.FileUniqueId;
+        return null;
     }
 
     private async Task ProcessForwardedMessageAsync(TelegramMessage message, CancellationToken ct)
