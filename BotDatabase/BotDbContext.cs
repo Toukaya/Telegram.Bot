@@ -13,6 +13,9 @@ public class BotDbContext : DbContext
     public DbSet<Todo> Todos { get; set; }
     public DbSet<Note> Notes { get; set; }
     public DbSet<MediaFile> MediaFiles { get; set; }
+    public DbSet<TeamMember> TeamMembers { get; set; }
+    public DbSet<WeeklyReport> WeeklyReports { get; set; }
+    public DbSet<ReportWeek> ReportWeeks { get; set; }
 
     private readonly string _dbPath;
 
@@ -132,6 +135,38 @@ public class BotDbContext : DbContext
             entity.HasIndex(e => e.ConvertStatus);
             entity.HasIndex(e => e.IsIndexed);
             entity.HasIndex(e => e.CreatedAt);
+        });
+
+        // TeamMember
+        modelBuilder.Entity<TeamMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Alias);
+            entity.HasIndex(e => e.TelegramUserId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.Role);
+        });
+
+        // WeeklyReport
+        modelBuilder.Entity<WeeklyReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TeamMemberId, e.WeekStart }).IsUnique();
+            entity.HasIndex(e => e.WeekStart);
+            entity.HasIndex(e => e.SubmittedAt);
+
+            entity.HasOne(e => e.TeamMember)
+                .WithMany(m => m.WeeklyReports)
+                .HasForeignKey(e => e.TeamMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ReportWeek
+        modelBuilder.Entity<ReportWeek>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WeekStart).IsUnique();
+            entity.HasIndex(e => new { e.Year, e.WeekNumber });
         });
     }
 }

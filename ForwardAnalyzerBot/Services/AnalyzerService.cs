@@ -21,20 +21,20 @@ public class AnalyzerService : IDisposable
 
     public void Initialize(bool enableHotReload = true)
     {
-        // Load built-in analyzers from TelegramBotService assembly
-        _loader.LoadBuiltIn();
-
-        Console.WriteLine($"[AnalyzerService] Loaded {_loader.Analyzers.Count} built-in analyzers:");
-        foreach (var analyzer in _loader.Analyzers)
-        {
-            Console.WriteLine($"  - {analyzer.Name}: {analyzer.Description}");
-        }
-
-        // Load external plugins if directory exists
+        // Load external plugins first if directory exists
         if (Directory.Exists(_pluginsDirectory))
         {
             _loader.LoadAll();
             Console.WriteLine($"[AnalyzerService] Plugins directory: {_pluginsDirectory}");
+        }
+
+        // Load built-in analyzers from TelegramBotService assembly (after plugins, so they're not cleared)
+        _loader.LoadBuiltIn();
+
+        Console.WriteLine($"[AnalyzerService] Loaded {_loader.Analyzers.Count} analyzers:");
+        foreach (var analyzer in _loader.Analyzers)
+        {
+            Console.WriteLine($"  - {analyzer.Name}: {analyzer.Description}");
         }
 
         if (enableHotReload)

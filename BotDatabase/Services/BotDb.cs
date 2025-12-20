@@ -22,6 +22,9 @@ public class BotDb : IDisposable
     public NoteRepository Notes { get; }
     public AnalysisRepository Analysis { get; }
     public MediaFileRepository MediaFiles { get; }
+    public TeamMemberRepository TeamMembers { get; }
+    public WeeklyReportRepository WeeklyReports { get; }
+    public ReportWeekRepository ReportWeeks { get; }
 
     public BotDb(string dbPath = "bot.db")
     {
@@ -34,6 +37,9 @@ public class BotDb : IDisposable
         Notes = new NoteRepository(_context);
         Analysis = new AnalysisRepository(_context);
         MediaFiles = new MediaFileRepository(_context);
+        TeamMembers = new TeamMemberRepository(_context);
+        WeeklyReports = new WeeklyReportRepository(_context);
+        ReportWeeks = new ReportWeekRepository(_context);
         DbLogger.Debug(Tag, $"Initialized with path: {dbPath}");
     }
 
@@ -773,6 +779,346 @@ public class MediaFileQuery
             .Where(m => !string.IsNullOrEmpty(m.TextContent))
             .Select(m => m.TextContent)
             .Take(_limit)
+            .ToListAsync();
+    }
+}
+
+// ========== TeamMember Repository ==========
+
+public class TeamMemberRepository
+{
+    private const string Tag = "TeamMembers";
+    private readonly BotDbContext _context;
+
+    public TeamMemberRepository(BotDbContext context) => _context = context;
+
+    public async Task<TeamMember> Create(string name, string alias, string role = TeamMemberRole.Developer)
+    {
+        var member = new TeamMember
+        {
+            Name = name,
+            Alias = alias,
+            Role = role,
+            Status = TeamMemberStatus.Active,
+            JoinedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _context.TeamMembers.Add(member);
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created member {member.Id}: {name} ({alias})");
+        return member;
+    }
+
+    public async Task<TeamMember> Find(int id)
+    {
+        return await _context.TeamMembers.FindAsync(id);
+    }
+
+    public async Task<TeamMember> FindByAlias(string alias)
+    {
+        return await _context.TeamMembers
+            .FirstOrDefaultAsync(m => m.Alias.ToLower() == alias.ToLower());
+    }
+
+    public async Task<TeamMember> FindByTelegramId(long telegramUserId)
+    {
+        return await _context.TeamMembers
+            .FirstOrDefaultAsync(m => m.TelegramUserId == telegramUserId);
+    }
+
+    public async Task<TeamMember> MatchByName(string nameOrAlias)
+    {
+        var lower = nameOrAlias.ToLower();
+        return await _context.TeamMembers
+            .FirstOrDefaultAsync(m =>
+                m.Alias.ToLower() == lower ||
+                m.Name.ToLower() == lower ||
+                m.Name.ToLower().Contains(lower));
+    }
+
+    public async Task Update(TeamMember member)
+    {
+        member.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Updated member {member.Id}: {member.Name}");
+    }
+
+    public async Task SetStatus(int id, string status)
+    {
+        var member = await _context.TeamMembers.FindAsync(id);
+        if (member != null)
+        {
+            member.Status = status;
+            member.UpdatedAt = DateTime.UtcNow;
+            if (status == TeamMemberStatus.Left)
+            {
+                member.LeftAt = DateTime.UtcNow;
+            }
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Member {id} status changed to {status}");
+        }
+    }
+
+    public async Task Delete(int id)
+    {
+        var member = await _context.TeamMembers.FindAsync(id);
+        if (member != null)
+        {
+            _context.TeamMembers.Remove(member);
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted member {id}");
+        }
+    }
+
+    public async Task<List<TeamMember>> GetAllAsync()
+    {
+        return await _context.TeamMembers.ToListAsync();
+    }
+
+    public async Task<List<TeamMember>> GetActiveAsync()
+    {
+        return await _context.TeamMembers
+            .Where(m => m.Status == TeamMemberStatus.Active)
+            .ToListAsync();
+    }
+
+    public async Task<List<TeamMember>> GetByStatusAsync(string status)
+    {
+        return await _context.TeamMembers
+            .Where(m => m.Status == status)
+            .ToListAsync();
+    }
+
+    public async Task<List<TeamMember>> GetByRoleAsync(string role)
+    {
+        return await _context.TeamMembers
+            .Where(m => m.Role == role && m.Status != TeamMemberStatus.Left)
+            .ToListAsync();
+    }
+
+    public async Task<List<TeamMember>> GetDevelopersAsync()
+    {
+        return await GetByRoleAsync(TeamMemberRole.Developer);
+    }
+
+    public async Task<List<TeamMember>> GetDesignersAsync()
+    {
+        return await GetByRoleAsync(TeamMemberRole.Designer);
+    }
+
+    public async Task<int> CountActiveAsync()
+    {
+        return await _context.TeamMembers
+            .CountAsync(m => m.Status == TeamMemberStatus.Active);
+    }
+}
+
+// ========== WeeklyReport Repository ==========
+
+public class WeeklyReportRepository
+{
+    private const string Tag = "WeeklyReports";
+    private readonly BotDbContext _context;
+
+    public WeeklyReportRepository(BotDbContext context) => _context = context;
+
+    public async Task<WeeklyReport> Create(WeeklyReport report)
+    {
+        report.CreatedAt = DateTime.UtcNow;
+        report.UpdatedAt = DateTime.UtcNow;
+        report.SubmittedAt = DateTime.UtcNow;
+        _context.WeeklyReports.Add(report);
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created report {report.Id} for member {report.TeamMemberId}, week {report.WeekStart:yyyy-MM-dd}");
+        return report;
+    }
+
+    public async Task<WeeklyReport> Find(int id)
+    {
+        return await _context.WeeklyReports
+            .Include(r => r.TeamMember)
+            .FirstOrDefaultAsync(r => r.Id == id);
+    }
+
+    public async Task<WeeklyReport> FindByMemberAndWeek(int memberId, DateTime weekStart)
+    {
+        return await _context.WeeklyReports
+            .Include(r => r.TeamMember)
+            .FirstOrDefaultAsync(r => r.TeamMemberId == memberId && r.WeekStart == weekStart.Date);
+    }
+
+    public async Task<WeeklyReport> Upsert(WeeklyReport report)
+    {
+        var existing = await FindByMemberAndWeek(report.TeamMemberId, report.WeekStart);
+        if (existing != null)
+        {
+            existing.DoneThisWeek = report.DoneThisWeek;
+            existing.PlannedNextWeek = report.PlannedNextWeek;
+            existing.Blockers = report.Blockers;
+            existing.RawContent = report.RawContent;
+            existing.SubmittedVia = report.SubmittedVia;
+            existing.MessageId = report.MessageId;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Updated report {existing.Id} for member {existing.TeamMemberId}");
+            return existing;
+        }
+        return await Create(report);
+    }
+
+    public async Task Update(WeeklyReport report)
+    {
+        report.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Updated report {report.Id}");
+    }
+
+    public async Task<List<WeeklyReport>> GetByWeekAsync(DateTime weekStart)
+    {
+        return await _context.WeeklyReports
+            .Include(r => r.TeamMember)
+            .Where(r => r.WeekStart == weekStart.Date)
+            .ToListAsync();
+    }
+
+    public async Task<List<WeeklyReport>> GetByMemberAsync(int memberId, int limit = 10)
+    {
+        return await _context.WeeklyReports
+            .Where(r => r.TeamMemberId == memberId)
+            .OrderByDescending(r => r.WeekStart)
+            .Take(limit)
+            .ToListAsync();
+    }
+
+    public async Task<List<int>> GetSubmittedMemberIdsAsync(DateTime weekStart)
+    {
+        return await _context.WeeklyReports
+            .Where(r => r.WeekStart == weekStart.Date)
+            .Select(r => r.TeamMemberId)
+            .ToListAsync();
+    }
+
+    public async Task<int> CountByWeekAsync(DateTime weekStart)
+    {
+        return await _context.WeeklyReports
+            .CountAsync(r => r.WeekStart == weekStart.Date);
+    }
+
+    public async Task Delete(int id)
+    {
+        var report = await _context.WeeklyReports.FindAsync(id);
+        if (report != null)
+        {
+            _context.WeeklyReports.Remove(report);
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted report {id}");
+        }
+    }
+}
+
+// ========== ReportWeek Repository ==========
+
+public class ReportWeekRepository
+{
+    private const string Tag = "ReportWeeks";
+    private readonly BotDbContext _context;
+
+    public ReportWeekRepository(BotDbContext context) => _context = context;
+
+    public async Task<ReportWeek> Create(ReportWeek week)
+    {
+        week.CreatedAt = DateTime.UtcNow;
+        week.UpdatedAt = DateTime.UtcNow;
+        _context.ReportWeeks.Add(week);
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created report week {week.Id}: W{week.WeekNumber} {week.Year}");
+        return week;
+    }
+
+    public async Task<ReportWeek> Find(int id)
+    {
+        return await _context.ReportWeeks.FindAsync(id);
+    }
+
+    public async Task<ReportWeek> FindByWeekStart(DateTime weekStart)
+    {
+        return await _context.ReportWeeks
+            .FirstOrDefaultAsync(w => w.WeekStart == weekStart.Date);
+    }
+
+    public async Task<ReportWeek> GetOrCreate(DateTime weekStart, DateTime weekEnd, int weekNumber, int year)
+    {
+        var existing = await FindByWeekStart(weekStart);
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        var week = new ReportWeek
+        {
+            WeekStart = weekStart.Date,
+            WeekEnd = weekEnd.Date,
+            WeekNumber = weekNumber,
+            Year = year
+        };
+        return await Create(week);
+    }
+
+    public async Task Update(ReportWeek week)
+    {
+        week.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Updated report week {week.Id}");
+    }
+
+    public async Task UpdateStats(int id, int totalActive, int submitted, int missing, int onVacation)
+    {
+        var week = await _context.ReportWeeks.FindAsync(id);
+        if (week != null)
+        {
+            week.TotalActiveMembers = totalActive;
+            week.SubmittedCount = submitted;
+            week.MissingCount = missing;
+            week.OnVacationCount = onVacation;
+            week.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Updated stats for week {id}: {submitted}/{totalActive} submitted");
+        }
+    }
+
+    public async Task MarkGenerated(int id, string reportPath, string trackerChPath, string trackerEnPath)
+    {
+        var week = await _context.ReportWeeks.FindAsync(id);
+        if (week != null)
+        {
+            week.ReportFilePath = reportPath;
+            week.TrackerChPath = trackerChPath;
+            week.TrackerEnPath = trackerEnPath;
+            week.GeneratedAt = DateTime.UtcNow;
+            week.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Marked week {id} as generated");
+        }
+    }
+
+    public async Task MarkSent(int id)
+    {
+        var week = await _context.ReportWeeks.FindAsync(id);
+        if (week != null)
+        {
+            week.SentAt = DateTime.UtcNow;
+            week.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Marked week {id} as sent");
+        }
+    }
+
+    public async Task<List<ReportWeek>> GetRecentAsync(int count = 10)
+    {
+        return await _context.ReportWeeks
+            .OrderByDescending(w => w.WeekStart)
+            .Take(count)
             .ToListAsync();
     }
 }
