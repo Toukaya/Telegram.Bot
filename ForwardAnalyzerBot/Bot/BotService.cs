@@ -1,4 +1,5 @@
 using ForwardAnalyzerBot.Services;
+using TelegramBotService.TaskAI;
 using BotDatabase.Services;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
@@ -42,6 +43,9 @@ public class BotService : IDisposable
     private readonly MediaProcessingPipeline _pipeline;
     private readonly bool _indexingEnabled;
 
+    // TaskAI service (optional)
+    private readonly ITaskAiService _taskAiService;
+
     // Legacy constructor - uses shell scripts
     public BotService(string token, BotDb db, string textScriptPath, string mediaScriptPath, int concurrency = 1, int scriptTimeout = 30)
     {
@@ -67,12 +71,13 @@ public class BotService : IDisposable
     }
 
     // Full constructor - uses C# plugin system with indexing services
-    public BotService(string token, BotDb db, AnalyzerService analyzerService, IndexingConfig indexingConfig, int concurrency = 1)
+    public BotService(string token, BotDb db, AnalyzerService analyzerService, IndexingConfig indexingConfig, int concurrency = 1, ITaskAiService taskAiService = null)
     {
         _bot = new TelegramBotClient(token);
         _db = db;
         _taskPool = new TaskPool(concurrency);
         _analyzerService = analyzerService;
+        _taskAiService = taskAiService;
         _usePlugins = true;
 
         // Initialize indexing services if config provided
@@ -102,10 +107,10 @@ public class BotService : IDisposable
             // Create media processor
             _mediaProcessor = new MediaProcessor(_fileService, _pipeline, _contentIndexer);
 
-            // Create message handler with indexing services
-            _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db, _mediaProcessor, _contentIndexer, _searchService);
+            // Create message handler with indexing services and TaskAI
+            _messageHandler = new MessageHandler(_bot, _taskPool, _analyzerService, _db, _mediaProcessor, _contentIndexer, _searchService, _taskAiService);
 
-            Logger.Debug(Tag, $"Initialized with plugin system + indexing (memory={memoryService.IsAvailable})");
+            Logger.Debug(Tag, $"Initialized with plugin system + indexing (memory={memoryService.IsAvailable}, taskAi={_taskAiService != null})");
         }
         else
         {

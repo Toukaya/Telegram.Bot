@@ -2,11 +2,22 @@ using ForwardAnalyzerBot.Bot;
 using ForwardAnalyzerBot.Services;
 using BotDatabase.Services;
 using TelegramBotService.Pipeline;
+using TelegramBotService.AI;
+using TelegramBotService.TaskAI;
 
 class Program
 {
     static async Task Main(string[] args)
     {
+        // Check for transcription mode
+        var transcribeModeEnv = Environment.GetEnvironmentVariable("TRANSCRIBE_MODE");
+        var transcribeMode = transcribeModeEnv != null && transcribeModeEnv.ToLower() == "true";
+        if (transcribeMode)
+        {
+            await RunTranscriptionModeAsync();
+            return;
+        }
+
         // Configuration
         var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         var usePlugins = Environment.GetEnvironmentVariable("USE_PLUGINS")?.ToLower() == "true";
@@ -17,6 +28,10 @@ class Program
         var enableIndexing = Environment.GetEnvironmentVariable("ENABLE_INDEXING")?.ToLower() == "true";
         var storagePath = Environment.GetEnvironmentVariable("STORAGE_PATH") ?? "./storage";
         var tempPath = Environment.GetEnvironmentVariable("TEMP_PATH") ?? "./temp";
+
+        // TaskAI configuration
+        var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var taskAiModel = Environment.GetEnvironmentVariable("TASKAI_MODEL") ?? "gpt-4o-mini";
 
         // Legacy script paths (only used if USE_PLUGINS != true)
         var textScriptPath = Environment.GetEnvironmentVariable("TEXT_SCRIPT_PATH") ?? "./analyze_text.sh";
@@ -43,6 +58,10 @@ class Program
             Console.WriteLine("  export STORAGE_PATH=./storage               # optional");
             Console.WriteLine("  export TEMP_PATH=./temp                     # optional");
             Console.WriteLine();
+            Console.WriteLine("  # Optional: Enable TaskAI for task management");
+            Console.WriteLine("  export OPENAI_API_KEY=your_openai_api_key");
+            Console.WriteLine("  export TASKAI_MODEL=gpt-4o-mini             # optional");
+            Console.WriteLine();
             Console.WriteLine("  dotnet run");
             Environment.Exit(1);
             return;
@@ -68,6 +87,26 @@ class Program
             analyzerService.Initialize(enableHotReload: true);
             Console.WriteLine();
 
+            // Create TaskAI service if OpenAI key is configured
+            ITaskAiService taskAiService = null;
+            if (!string.IsNullOrEmpty(openAiApiKey))
+            {
+                Console.WriteLine("TaskAI: Enabled");
+                Console.WriteLine($"  Model: {taskAiModel}");
+                Console.WriteLine();
+
+                var aiConfig = new AiServiceConfig
+                {
+                    Enabled = true,
+                    OpenAiApiKey = openAiApiKey,
+                    OpenAiModel = taskAiModel
+                };
+                var aiService = new OpenAiService(aiConfig);
+
+                var taskAiConfig = new TaskAiConfig { Model = taskAiModel };
+                taskAiService = new TaskAiService(aiService, taskAiConfig);
+            }
+
             if (enableIndexing)
             {
                 Console.WriteLine("Indexing: Enabled");
@@ -90,7 +129,8 @@ class Program
                     db: db,
                     analyzerService: analyzerService,
                     indexingConfig: indexingConfig,
-                    concurrency: 1
+                    concurrency: 1,
+                    taskAiService: taskAiService
                 );
             }
             else
@@ -99,7 +139,9 @@ class Program
                     token: token,
                     db: db,
                     analyzerService: analyzerService,
-                    concurrency: 1
+                    indexingConfig: null,
+                    concurrency: 1,
+                    taskAiService: taskAiService
                 );
             }
         }
@@ -148,6 +190,63 @@ class Program
             shutdownEvent.Wait();
 
             // Stop gracefully
+            await botService.StopAsync();
+
+            Console.WriteLine("Bot stopped. Goodbye!");
+        }
+    }
+
+    static async Task RunTranscriptionModeAsync()
+    {
+        var token = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+        var outputPath = Environment.GetEnvironmentVariable("TRANSCRIBE_OUTPUT") ?? $"./transcripts_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+        var tempPath = Environment.GetEnvironmentVariable("TEMP_PATH") ?? "./temp";
+        var whisperCliPath = Environment.GetEnvironmentVariable("WHISPER_CLI_PATH");
+        var whisperModelPath = Environment.GetEnvironmentVariable("WHISPER_MODEL_PATH");
+
+        if (string.IsNullOrEmpty(token))
+        {
+            Console.WriteLine("Error: TELEGRAM_BOT_TOKEN environment variable is not set.");
+            Environment.Exit(1);
+            return;
+        }
+
+        Console.WriteLine("=== Transcription Bot ===");
+        Console.WriteLine($"Output: {outputPath}");
+        Console.WriteLine();
+
+        var botService = new TranscriptionBotService(
+            token,
+            outputPath,
+            tempPath,
+            whisperCliPath,
+            whisperModelPath
+        );
+
+        using (botService)
+        {
+            var shutdownEvent = new ManualResetEventSlim(false);
+
+            Console.CancelKeyPress += (sender, e) =>
+            {
+                e.Cancel = true;
+                Console.WriteLine();
+                Console.WriteLine("Shutdown requested...");
+                shutdownEvent.Set();
+            };
+
+            AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
+            {
+                shutdownEvent.Set();
+            };
+
+            await botService.StartAsync();
+
+            Console.WriteLine("Forward messages to me. Press Ctrl+C to stop.");
+            Console.WriteLine();
+
+            shutdownEvent.Wait();
+
             await botService.StopAsync();
 
             Console.WriteLine("Bot stopped. Goodbye!");

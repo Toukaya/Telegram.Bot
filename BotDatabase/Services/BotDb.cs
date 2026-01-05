@@ -25,6 +25,7 @@ public class BotDb : IDisposable
     public TeamMemberRepository TeamMembers { get; }
     public WeeklyReportRepository WeeklyReports { get; }
     public ReportWeekRepository ReportWeeks { get; }
+    public TaskBacklogRepository TaskBacklogs { get; }
 
     public BotDb(string dbPath = "bot.db")
     {
@@ -40,6 +41,7 @@ public class BotDb : IDisposable
         TeamMembers = new TeamMemberRepository(_context);
         WeeklyReports = new WeeklyReportRepository(_context);
         ReportWeeks = new ReportWeekRepository(_context);
+        TaskBacklogs = new TaskBacklogRepository(_context);
         DbLogger.Debug(Tag, $"Initialized with path: {dbPath}");
     }
 
@@ -1120,5 +1122,55 @@ public class ReportWeekRepository
             .OrderByDescending(w => w.WeekStart)
             .Take(count)
             .ToListAsync();
+    }
+}
+
+// ========== TaskBacklog Repository ==========
+
+public class TaskBacklogRepository
+{
+    private const string Tag = "TaskBacklogs";
+    private readonly BotDbContext _context;
+
+    public TaskBacklogRepository(BotDbContext context) => _context = context;
+
+    public async Task<TaskBacklog> GetByChatIdAsync(long chatId)
+    {
+        return await _context.TaskBacklogs
+            .FirstOrDefaultAsync(b => b.ChatId == chatId);
+    }
+
+    public async Task<TaskBacklog> UpsertAsync(TaskBacklog backlog)
+    {
+        var existing = await GetByChatIdAsync(backlog.ChatId);
+        if (existing != null)
+        {
+            existing.Project = backlog.Project;
+            existing.BacklogYaml = backlog.BacklogYaml;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Updated backlog for chat {backlog.ChatId}");
+            return existing;
+        }
+
+        backlog.CreatedAt = DateTime.UtcNow;
+        backlog.UpdatedAt = DateTime.UtcNow;
+        _context.TaskBacklogs.Add(backlog);
+        await _context.SaveChangesAsync();
+        DbLogger.Debug(Tag, $"Created backlog for chat {backlog.ChatId}");
+        return backlog;
+    }
+
+    public async Task<bool> DeleteAsync(long chatId)
+    {
+        var backlog = await GetByChatIdAsync(chatId);
+        if (backlog != null)
+        {
+            _context.TaskBacklogs.Remove(backlog);
+            await _context.SaveChangesAsync();
+            DbLogger.Debug(Tag, $"Deleted backlog for chat {chatId}");
+            return true;
+        }
+        return false;
     }
 }

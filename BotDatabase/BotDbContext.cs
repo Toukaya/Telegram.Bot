@@ -16,6 +16,7 @@ public class BotDbContext : DbContext
     public DbSet<TeamMember> TeamMembers { get; set; }
     public DbSet<WeeklyReport> WeeklyReports { get; set; }
     public DbSet<ReportWeek> ReportWeeks { get; set; }
+    public DbSet<TaskBacklog> TaskBacklogs { get; set; }
 
     private readonly string _dbPath;
 
@@ -167,6 +168,13 @@ public class BotDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.WeekStart).IsUnique();
             entity.HasIndex(e => new { e.Year, e.WeekNumber });
+        });
+
+        // TaskBacklog
+        modelBuilder.Entity<TaskBacklog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ChatId);
         });
     }
 }
